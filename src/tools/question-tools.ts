@@ -159,6 +159,7 @@ export function registerQuestionTools(
         dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC),
         displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC),
         recodeValues: z.record(z.any()).optional().describe("Numeric mapping of question choices (for custom score values)"),
+        configuration: z.record(z.any()).optional().describe("Raw Configuration object controlling how the question is displayed. Shape varies by QuestionType — e.g., Timing questions accept {QuestionDescriptionOption: 'SpecifyLabel', MinSeconds, MaxSeconds}; MC questions accept TextPosition, ChoiceColumnWidth, LabelPosition, NumColumns, etc. Consult the Qualtrics Create Question docs for the allowed fields per type."),
       },
     },
     withErrorHandling("create_question", async (args) => {
@@ -177,6 +178,7 @@ export function registerQuestionTools(
       if (args.questionJS !== undefined) questionData.QuestionJS = args.questionJS;
       if (args.displayLogic) questionData.DisplayLogic = args.displayLogic;
       if (args.recodeValues) questionData.RecodeValues = args.recodeValues;
+      if (args.configuration) questionData.Configuration = args.configuration;
 
       const result = await surveyApi.createQuestion(args.surveyId, args.blockId, questionData);
 
@@ -221,6 +223,7 @@ export function registerQuestionTools(
         dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC + ' Pass empty string "" to revert to auto-generated.'),
         displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC + ' Pass `null` or empty object to clear existing logic.'),
         recodeValues: z.record(z.any()).optional().describe("Updated recode values"),
+        configuration: z.record(z.any()).optional().describe("Raw Configuration object controlling how the question is displayed. Shape varies by QuestionType. Pass the full replacement object; carried forward from current state when not specified."),
       },
     },
     withErrorHandling("update_question", async (args) => {
@@ -261,6 +264,7 @@ export function registerQuestionTools(
       }
       if (args.displayLogic !== undefined) data.DisplayLogic = args.displayLogic;
       if (args.recodeValues !== undefined) data.RecodeValues = args.recodeValues;
+      if (args.configuration !== undefined) data.Configuration = args.configuration;
 
       const result = await surveyApi.updateQuestion(args.surveyId, args.questionId, data);
 
