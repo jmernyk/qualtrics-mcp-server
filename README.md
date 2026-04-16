@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that gives Claude full control over the Qualtrics platform. Build surveys, manage questions, configure logic flows, distribute via email, handle contacts, export responses, and more — all through natural language.
 
-> **Fork additions:** question tools now accept custom `dataExportTag` (human-readable SPSS column names), `displayLogic` (question-level show/hide rules), `requestResponse` (soft response prompt, distinct from force response), `validation` overrides, and per-row `rowExportTags` on matrix questions. `update_question` carries forward `DataExportTag`, `DisplayLogic`, `Configuration`, and other fields that the Qualtrics full-replace PUT would otherwise wipe.
+> **Fork additions:** question tools now accept custom `dataExportTag` (human-readable column names), `displayLogic` (question-level show/hide rules), `requestResponse` (soft response prompt, distinct from force response), `validation` overrides, and per-row `rowExportTags` on matrix questions. `update_question` carries forward `DataExportTag`, `DisplayLogic`, `Configuration`, and other fields that the Qualtrics full-replace PUT would otherwise wipe.
 
 ## What Can It Do?
 
