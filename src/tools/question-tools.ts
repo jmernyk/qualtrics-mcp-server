@@ -46,7 +46,7 @@ function buildValidation(opts: {
     return {
       Settings: {
         ForceResponse: "ON",
-        ForceResponseType: "REQUEST",
+        ForceResponseType: "RequestResponse",
         Type: "None",
       },
     };
