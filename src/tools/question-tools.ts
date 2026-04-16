@@ -160,6 +160,7 @@ export function registerQuestionTools(
         displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC),
         recodeValues: z.record(z.any()).optional().describe("Numeric mapping of question choices (for custom score values)"),
         configuration: z.record(z.any()).optional().describe("Raw Configuration object controlling how the question is displayed. Shape varies by QuestionType — e.g., Timing questions accept {QuestionDescriptionOption: 'SpecifyLabel', MinSeconds, MaxSeconds}; MC questions accept TextPosition, ChoiceColumnWidth, LabelPosition, NumColumns, etc. Consult the Qualtrics Create Question docs for the allowed fields per type."),
+        choiceDataExportTags: z.record(z.string()).optional().describe("Per-row DataExportTag for Matrix questions, structured as {\"1\": \"tag1\", \"2\": \"tag2\"}. Sets the human-readable column name for each matrix row in the SPSS/CSV export."),
       },
     },
     withErrorHandling("create_question", async (args) => {
@@ -179,6 +180,7 @@ export function registerQuestionTools(
       if (args.displayLogic) questionData.DisplayLogic = args.displayLogic;
       if (args.recodeValues) questionData.RecodeValues = args.recodeValues;
       if (args.configuration) questionData.Configuration = args.configuration;
+      if (args.choiceDataExportTags) questionData.ChoiceDataExportTags = args.choiceDataExportTags;
 
       const result = await surveyApi.createQuestion(args.surveyId, args.blockId, questionData);
 
@@ -224,6 +226,7 @@ export function registerQuestionTools(
         displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC + ' Pass `null` or empty object to clear existing logic.'),
         recodeValues: z.record(z.any()).optional().describe("Updated recode values"),
         configuration: z.record(z.any()).optional().describe("Raw Configuration object controlling how the question is displayed. Shape varies by QuestionType. Pass the full replacement object; carried forward from current state when not specified."),
+        choiceDataExportTags: z.record(z.string()).optional().describe("Per-row DataExportTag for Matrix questions, structured as {\"1\": \"tag1\", \"2\": \"tag2\"}. Carried forward from current state when not specified."),
       },
     },
     withErrorHandling("update_question", async (args) => {
@@ -250,6 +253,7 @@ export function registerQuestionTools(
       if (currentQ.RecodeValues !== undefined) data.RecodeValues = currentQ.RecodeValues;
       if (currentQ.Configuration !== undefined) data.Configuration = currentQ.Configuration;
       if (currentQ.Language !== undefined) data.Language = currentQ.Language;
+      if (currentQ.ChoiceDataExportTags !== undefined) data.ChoiceDataExportTags = currentQ.ChoiceDataExportTags;
 
       // User-provided values override existing ones
       if (args.questionText !== undefined) data.QuestionText = args.questionText;
@@ -265,6 +269,7 @@ export function registerQuestionTools(
       if (args.displayLogic !== undefined) data.DisplayLogic = args.displayLogic;
       if (args.recodeValues !== undefined) data.RecodeValues = args.recodeValues;
       if (args.configuration !== undefined) data.Configuration = args.configuration;
+      if (args.choiceDataExportTags !== undefined) data.ChoiceDataExportTags = args.choiceDataExportTags;
 
       const result = await surveyApi.updateQuestion(args.surveyId, args.questionId, data);
 
@@ -556,10 +561,10 @@ export function registerQuestionTools(
         scalePoints: z.array(z.string()).min(2).describe("Array of scale point labels (e.g., ['Strongly Disagree', ..., 'Strongly Agree'])"),
         forceResponse: z.boolean().optional().describe("Require a response for all statements — hard block on skip (default: false)"),
         requestResponse: z.boolean().optional().describe("Request a response for all statements — soft prompt on skip (default: false). Mutually exclusive with forceResponse."),
-        dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC + ' Note: individual matrix rows export as <tag>_1, <tag>_2, etc. by default. For per-row human-readable names, use create_question with custom Choices having VariableName fields.'),
+        dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC + ' Note: without rowExportTags, matrix rows export as <tag>_1, <tag>_2, etc.'),
         displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC),
         validation: z.record(z.any()).optional().describe(VALIDATION_OVERRIDE_DESC),
-        rowExportTags: z.array(z.string()).optional().describe("Per-row DataExportTag suffixes. If provided, each row gets its own custom tag via the choice VariableName field. Length must match statements length."),
+        rowExportTags: z.array(z.string()).optional().describe("Per-row DataExportTag suffixes for human-readable SPSS column names. Written to the question-level ChoiceDataExportTags field. Length must match statements length."),
       },
     },
     withErrorHandling("add_matrix_question", async (args) => {
@@ -567,13 +572,9 @@ export function registerQuestionTools(
         return toolError(`rowExportTags length (${args.rowExportTags.length}) must match statements length (${args.statements.length}).`);
       }
 
-      const choices: Record<string, { Display: string; VariableName?: string }> = {};
+      const choices: Record<string, { Display: string }> = {};
       args.statements.forEach((stmt: string, index: number) => {
-        const choice: { Display: string; VariableName?: string } = { Display: stmt };
-        if (args.rowExportTags) {
-          choice.VariableName = args.rowExportTags[index];
-        }
-        choices[String(index + 1)] = choice;
+        choices[String(index + 1)] = { Display: stmt };
       });
 
       const answers: Record<string, { Display: string }> = {};
@@ -592,6 +593,14 @@ export function registerQuestionTools(
         Answers: answers,
         AnswerOrder: args.scalePoints.map((_: string, i: number) => String(i + 1)),
       };
+
+      if (args.rowExportTags) {
+        const choiceDataExportTags: Record<string, string> = {};
+        args.rowExportTags.forEach((tag: string, index: number) => {
+          choiceDataExportTags[String(index + 1)] = tag;
+        });
+        questionData.ChoiceDataExportTags = choiceDataExportTags;
+      }
 
       const validation = buildValidation({
         forceResponse: args.forceResponse,
