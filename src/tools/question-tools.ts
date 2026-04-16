@@ -14,6 +14,46 @@ function nextExportTag(): string {
 const QUESTION_JS_DESC =
   "JavaScript to attach to this question (QuestionJS). IMPORTANT: Avoid literal `${` in JS strings — Qualtrics interprets it as piped text and corrupts the code. Use `\\x24{` or `String.fromCharCode(36)+'{'` instead.";
 
+const DATA_EXPORT_TAG_DESC =
+  "Custom DataExportTag (human-readable column name in SPSS/CSV exports). If omitted, an auto-generated tag (Q_auto_N) is used.";
+
+const DISPLAY_LOGIC_DESC =
+  "Question-level DisplayLogic object (Qualtrics BooleanExpression tree). Controls whether the question is shown based on prior answers. Pass the raw Qualtrics DisplayLogic structure.";
+
+const VALIDATION_OVERRIDE_DESC =
+  "Raw Validation object override (takes precedence over forceResponse/requestResponse). Use when you need full control over Validation.Settings (e.g., custom validation logic).";
+
+// Build a Validation object based on convenience flags.
+// Force Response: hard block — respondent cannot advance without answering.
+// Request Response: soft prompt — respondent is asked to reconsider but can skip.
+// The ForceResponseType string distinguishes them; Qualtrics accepts "ON" (force) or "REQUEST" (request).
+function buildValidation(opts: {
+  forceResponse?: boolean;
+  requestResponse?: boolean;
+  override?: Record<string, any>;
+}): Record<string, any> | undefined {
+  if (opts.override !== undefined) return opts.override;
+  if (opts.forceResponse) {
+    return {
+      Settings: {
+        ForceResponse: "ON",
+        ForceResponseType: "ON",
+        Type: "None",
+      },
+    };
+  }
+  if (opts.requestResponse) {
+    return {
+      Settings: {
+        ForceResponse: "ON",
+        ForceResponseType: "REQUEST",
+        Type: "None",
+      },
+    };
+  }
+  return undefined;
+}
+
 const PIPED_TEXT_PREFIXES = /\$\{(q|e|m|date|rand|lm|gr):\/\//i;
 
 function checkQuestionJSWarning(js: string): string | null {
@@ -109,8 +149,16 @@ export function registerQuestionTools(
         choices: z.record(z.object({
           Display: z.string(),
         })).optional().describe("Choice definitions keyed by choice number"),
+        answers: z.record(z.object({
+          Display: z.string(),
+        })).optional().describe("Answer definitions keyed by answer number (for Matrix questions)"),
+        choiceOrder: z.array(z.string()).optional().describe("Display order of choices (array of choice keys)"),
+        answerOrder: z.array(z.string()).optional().describe("Display order of answers (Matrix questions)"),
         validation: z.record(z.any()).optional().describe("Validation settings"),
         questionJS: z.string().optional().describe(QUESTION_JS_DESC),
+        dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC),
+        displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC),
+        recodeValues: z.record(z.any()).optional().describe("Numeric mapping of question choices (for custom score values)"),
       },
     },
     withErrorHandling("create_question", async (args) => {
@@ -118,12 +166,17 @@ export function registerQuestionTools(
         QuestionText: args.questionText,
         QuestionType: args.questionType,
         Selector: args.selector,
-        DataExportTag: nextExportTag(),
+        DataExportTag: args.dataExportTag || nextExportTag(),
       };
       if (args.subSelector) questionData.SubSelector = args.subSelector;
       if (args.choices) questionData.Choices = args.choices;
+      if (args.answers) questionData.Answers = args.answers;
+      if (args.choiceOrder) questionData.ChoiceOrder = args.choiceOrder;
+      if (args.answerOrder) questionData.AnswerOrder = args.answerOrder;
       if (args.validation) questionData.Validation = args.validation;
       if (args.questionJS !== undefined) questionData.QuestionJS = args.questionJS;
+      if (args.displayLogic) questionData.DisplayLogic = args.displayLogic;
+      if (args.recodeValues) questionData.RecodeValues = args.recodeValues;
 
       const result = await surveyApi.createQuestion(args.surveyId, args.blockId, questionData);
 
@@ -158,8 +211,16 @@ export function registerQuestionTools(
         choices: z.record(z.object({
           Display: z.string(),
         })).optional().describe("Updated choice definitions"),
+        answers: z.record(z.object({
+          Display: z.string(),
+        })).optional().describe("Updated answer definitions (Matrix questions)"),
+        choiceOrder: z.array(z.string()).optional().describe("Updated display order of choices"),
+        answerOrder: z.array(z.string()).optional().describe("Updated display order of answers (Matrix)"),
         validation: z.record(z.any()).optional().describe("Updated validation settings"),
         questionJS: z.string().optional().describe(QUESTION_JS_DESC + ' Pass empty string "" to clear existing JS.'),
+        dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC + ' Pass empty string "" to revert to auto-generated.'),
+        displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC + ' Pass `null` or empty object to clear existing logic.'),
+        recodeValues: z.record(z.any()).optional().describe("Updated recode values"),
       },
     },
     withErrorHandling("update_question", async (args) => {
@@ -176,14 +237,30 @@ export function registerQuestionTools(
       // Carry forward existing values, then override with user-provided values
       if (currentQ.QuestionText !== undefined) data.QuestionText = currentQ.QuestionText;
       if (currentQ.Choices !== undefined) data.Choices = currentQ.Choices;
+      if (currentQ.Answers !== undefined) data.Answers = currentQ.Answers;
+      if (currentQ.ChoiceOrder !== undefined) data.ChoiceOrder = currentQ.ChoiceOrder;
+      if (currentQ.AnswerOrder !== undefined) data.AnswerOrder = currentQ.AnswerOrder;
       if (currentQ.Validation !== undefined) data.Validation = currentQ.Validation;
       if (currentQ.QuestionJS !== undefined) data.QuestionJS = currentQ.QuestionJS;
+      if (currentQ.DataExportTag !== undefined) data.DataExportTag = currentQ.DataExportTag;
+      if (currentQ.DisplayLogic !== undefined) data.DisplayLogic = currentQ.DisplayLogic;
+      if (currentQ.RecodeValues !== undefined) data.RecodeValues = currentQ.RecodeValues;
+      if (currentQ.Configuration !== undefined) data.Configuration = currentQ.Configuration;
+      if (currentQ.Language !== undefined) data.Language = currentQ.Language;
 
       // User-provided values override existing ones
       if (args.questionText !== undefined) data.QuestionText = args.questionText;
       if (args.choices !== undefined) data.Choices = args.choices;
+      if (args.answers !== undefined) data.Answers = args.answers;
+      if (args.choiceOrder !== undefined) data.ChoiceOrder = args.choiceOrder;
+      if (args.answerOrder !== undefined) data.AnswerOrder = args.answerOrder;
       if (args.validation !== undefined) data.Validation = args.validation;
       if (args.questionJS !== undefined) data.QuestionJS = args.questionJS;
+      if (args.dataExportTag !== undefined) {
+        data.DataExportTag = args.dataExportTag === "" ? nextExportTag() : args.dataExportTag;
+      }
+      if (args.displayLogic !== undefined) data.DisplayLogic = args.displayLogic;
+      if (args.recodeValues !== undefined) data.RecodeValues = args.recodeValues;
 
       const result = await surveyApi.updateQuestion(args.surveyId, args.questionId, data);
 
@@ -242,7 +319,11 @@ export function registerQuestionTools(
         questionText: z.string().min(1).describe("The question text"),
         choices: z.array(z.string()).min(2).describe("Array of choice labels (e.g., ['Yes', 'No', 'Maybe'])"),
         allowMultiple: z.boolean().optional().describe("Allow selecting multiple choices (default: false)"),
-        forceResponse: z.boolean().optional().describe("Require a response (default: false)"),
+        forceResponse: z.boolean().optional().describe("Require a response — hard block on skip (default: false)"),
+        requestResponse: z.boolean().optional().describe("Request a response — soft prompt on skip, allows skip (default: false). Mutually exclusive with forceResponse."),
+        dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC),
+        displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC),
+        validation: z.record(z.any()).optional().describe(VALIDATION_OVERRIDE_DESC),
       },
     },
     withErrorHandling("add_multiple_choice_question", async (args) => {
@@ -256,20 +337,18 @@ export function registerQuestionTools(
         QuestionType: "MC",
         Selector: args.allowMultiple ? "MAVR" : "SAVR",
         SubSelector: "TX",
-        DataExportTag: nextExportTag(),
+        DataExportTag: args.dataExportTag || nextExportTag(),
         Choices: choicesObj,
         ChoiceOrder: args.choices.map((_: string, i: number) => String(i + 1)),
       };
 
-      if (args.forceResponse) {
-        questionData.Validation = {
-          Settings: {
-            ForceResponse: "ON",
-            ForceResponseType: "ON",
-            Type: "None",
-          },
-        };
-      }
+      const validation = buildValidation({
+        forceResponse: args.forceResponse,
+        requestResponse: args.requestResponse,
+        override: args.validation,
+      });
+      if (validation) questionData.Validation = validation;
+      if (args.displayLogic) questionData.DisplayLogic = args.displayLogic;
 
       const result = await surveyApi.createQuestion(args.surveyId, args.blockId, questionData);
       return toolSuccess({
@@ -294,7 +373,12 @@ export function registerQuestionTools(
         blockId: z.string().min(1).describe("The block ID to add the question to"),
         questionText: z.string().min(1).describe("The question text"),
         textType: z.enum(["single", "multi", "essay"]).describe("Text entry type: single line, multi line, or essay"),
-        forceResponse: z.boolean().optional().describe("Require a response (default: false)"),
+        forceResponse: z.boolean().optional().describe("Require a response — hard block on skip (default: false)"),
+        requestResponse: z.boolean().optional().describe("Request a response — soft prompt on skip, allows skip (default: false). Mutually exclusive with forceResponse."),
+        dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC),
+        displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC),
+        validation: z.record(z.any()).optional().describe(VALIDATION_OVERRIDE_DESC),
+        questionJS: z.string().optional().describe(QUESTION_JS_DESC),
       },
     },
     withErrorHandling("add_text_entry_question", async (args) => {
@@ -308,18 +392,17 @@ export function registerQuestionTools(
         QuestionText: args.questionText,
         QuestionType: "TE",
         Selector: selectorMap[args.textType],
-        DataExportTag: nextExportTag(),
+        DataExportTag: args.dataExportTag || nextExportTag(),
       };
 
-      if (args.forceResponse) {
-        questionData.Validation = {
-          Settings: {
-            ForceResponse: "ON",
-            ForceResponseType: "ON",
-            Type: "None",
-          },
-        };
-      }
+      const validation = buildValidation({
+        forceResponse: args.forceResponse,
+        requestResponse: args.requestResponse,
+        override: args.validation,
+      });
+      if (validation) questionData.Validation = validation;
+      if (args.displayLogic) questionData.DisplayLogic = args.displayLogic;
+      if (args.questionJS !== undefined) questionData.QuestionJS = args.questionJS;
 
       const result = await surveyApi.createQuestion(args.surveyId, args.blockId, questionData);
       return toolSuccess({
@@ -344,6 +427,8 @@ export function registerQuestionTools(
         blockId: z.string().min(1).describe("The block ID to add the question to"),
         htmlContent: z.string().min(1).describe("The HTML content to display"),
         questionJS: z.string().optional().describe(QUESTION_JS_DESC),
+        dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC),
+        displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC),
       },
     },
     withErrorHandling("add_descriptive_text_question", async (args) => {
@@ -351,9 +436,10 @@ export function registerQuestionTools(
         QuestionText: args.htmlContent,
         QuestionType: "DB",
         Selector: "TB",
-        DataExportTag: nextExportTag(),
+        DataExportTag: args.dataExportTag || nextExportTag(),
       };
       if (args.questionJS !== undefined) questionData.QuestionJS = args.questionJS;
+      if (args.displayLogic) questionData.DisplayLogic = args.displayLogic;
 
       const result = await surveyApi.createQuestion(args.surveyId, args.blockId, questionData);
 
@@ -389,7 +475,11 @@ export function registerQuestionTools(
           "Preset scale: agree5 (Strongly Disagree→Strongly Agree 5pt), agree7 (7pt), frequency5 (Never→Always), satisfaction5 (Very Dissatisfied→Very Satisfied), likelihood5 (Very Unlikely→Very Likely), or custom (provide customLabels)"
         ),
         customLabels: z.array(z.string()).optional().describe("Custom scale labels (required when scale is 'custom', minimum 2 items)"),
-        forceResponse: z.boolean().optional().describe("Require a response (default: false)"),
+        forceResponse: z.boolean().optional().describe("Require a response — hard block on skip (default: false)"),
+        requestResponse: z.boolean().optional().describe("Request a response — soft prompt on skip, allows skip (default: false). Mutually exclusive with forceResponse."),
+        dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC),
+        displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC),
+        validation: z.record(z.any()).optional().describe(VALIDATION_OVERRIDE_DESC),
       },
     },
     withErrorHandling("add_likert_question", async (args) => {
@@ -421,20 +511,18 @@ export function registerQuestionTools(
         QuestionType: "MC",
         Selector: "SAVR",
         SubSelector: "TX",
-        DataExportTag: nextExportTag(),
+        DataExportTag: args.dataExportTag || nextExportTag(),
         Choices: choicesObj,
         ChoiceOrder: labels.map((_, i) => String(i + 1)),
       };
 
-      if (args.forceResponse) {
-        questionData.Validation = {
-          Settings: {
-            ForceResponse: "ON",
-            ForceResponseType: "ON",
-            Type: "None",
-          },
-        };
-      }
+      const validation = buildValidation({
+        forceResponse: args.forceResponse,
+        requestResponse: args.requestResponse,
+        override: args.validation,
+      });
+      if (validation) questionData.Validation = validation;
+      if (args.displayLogic) questionData.DisplayLogic = args.displayLogic;
 
       const result = await surveyApi.createQuestion(args.surveyId, args.blockId, questionData);
       return toolSuccess({
@@ -462,13 +550,26 @@ export function registerQuestionTools(
         questionText: z.string().min(1).describe("The question text/instructions"),
         statements: z.array(z.string()).min(1).describe("Array of statement/row labels"),
         scalePoints: z.array(z.string()).min(2).describe("Array of scale point labels (e.g., ['Strongly Disagree', ..., 'Strongly Agree'])"),
-        forceResponse: z.boolean().optional().describe("Require a response for all statements (default: false)"),
+        forceResponse: z.boolean().optional().describe("Require a response for all statements — hard block on skip (default: false)"),
+        requestResponse: z.boolean().optional().describe("Request a response for all statements — soft prompt on skip (default: false). Mutually exclusive with forceResponse."),
+        dataExportTag: z.string().optional().describe(DATA_EXPORT_TAG_DESC + ' Note: individual matrix rows export as <tag>_1, <tag>_2, etc. by default. For per-row human-readable names, use create_question with custom Choices having VariableName fields.'),
+        displayLogic: z.record(z.any()).optional().describe(DISPLAY_LOGIC_DESC),
+        validation: z.record(z.any()).optional().describe(VALIDATION_OVERRIDE_DESC),
+        rowExportTags: z.array(z.string()).optional().describe("Per-row DataExportTag suffixes. If provided, each row gets its own custom tag via the choice VariableName field. Length must match statements length."),
       },
     },
     withErrorHandling("add_matrix_question", async (args) => {
-      const choices: Record<string, { Display: string }> = {};
+      if (args.rowExportTags && args.rowExportTags.length !== args.statements.length) {
+        return toolError(`rowExportTags length (${args.rowExportTags.length}) must match statements length (${args.statements.length}).`);
+      }
+
+      const choices: Record<string, { Display: string; VariableName?: string }> = {};
       args.statements.forEach((stmt: string, index: number) => {
-        choices[String(index + 1)] = { Display: stmt };
+        const choice: { Display: string; VariableName?: string } = { Display: stmt };
+        if (args.rowExportTags) {
+          choice.VariableName = args.rowExportTags[index];
+        }
+        choices[String(index + 1)] = choice;
       });
 
       const answers: Record<string, { Display: string }> = {};
@@ -481,22 +582,20 @@ export function registerQuestionTools(
         QuestionType: "Matrix",
         Selector: "Likert",
         SubSelector: "SingleAnswer",
-        DataExportTag: nextExportTag(),
+        DataExportTag: args.dataExportTag || nextExportTag(),
         Choices: choices,
         ChoiceOrder: args.statements.map((_: string, i: number) => String(i + 1)),
         Answers: answers,
         AnswerOrder: args.scalePoints.map((_: string, i: number) => String(i + 1)),
       };
 
-      if (args.forceResponse) {
-        questionData.Validation = {
-          Settings: {
-            ForceResponse: "ON",
-            ForceResponseType: "ON",
-            Type: "None",
-          },
-        };
-      }
+      const validation = buildValidation({
+        forceResponse: args.forceResponse,
+        requestResponse: args.requestResponse,
+        override: args.validation,
+      });
+      if (validation) questionData.Validation = validation;
+      if (args.displayLogic) questionData.DisplayLogic = args.displayLogic;
 
       const result = await surveyApi.createQuestion(args.surveyId, args.blockId, questionData);
       return toolSuccess({
