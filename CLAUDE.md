@@ -1,6 +1,6 @@
 # Qualtrics MCP Server
 
-An MCP server providing 53 tools for full Qualtrics API coverage: surveys, questions, blocks, flow logic, response export, contacts, distributions, webhooks, and users.
+An MCP server providing 55 tools for full Qualtrics API coverage: surveys, questions, blocks, flow logic, response export, contacts, distributions, webhooks, and users.
 
 ## Example Reference
 

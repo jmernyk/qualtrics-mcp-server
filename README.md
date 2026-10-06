@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that gives Claude full control over the Qu
 
 ## What Can It Do?
 
-**53 tools** across 8 domains covering the entire Qualtrics API surface:
+**55 tools** across 8 domains covering the entire Qualtrics API surface:
 
 | Domain | Tools | Capabilities |
 |--------|-------|-------------|
@@ -35,6 +35,8 @@ A Model Context Protocol (MCP) server that gives Claude full control over the Qu
 - `create_question` — Create with full Qualtrics spec (any type/selector)
 - `update_question` — Modify text, choices, validation
 - `delete_question` — Remove a question
+- `create_question_raw` — Create from a full Qualtrics `QuestionDef` JSON passed verbatim (per-choice DisplayLogic, ExclusiveAnswer, RecodeValues, Labels, any type/selector)
+- `update_question_raw` — PUT a full `QuestionDef` verbatim; fetch with `get_question`, edit, and strip server-generated keys (`QuestionText_Unsafe`, `GradingData`, `DefaultChoices`, `NextChoiceId`, `NextAnswerId`, `DataVisibility`) first
 - `add_multiple_choice_question` — Simplified MC creation from a list of choice strings
 - `add_text_entry_question` — Simplified TE creation (single/multi/essay)
 - `add_matrix_question` — Simplified Likert/matrix with statements + scale points

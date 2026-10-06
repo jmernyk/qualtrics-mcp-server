@@ -623,4 +623,68 @@ export function registerQuestionTools(
       });
     })
   );
+
+  // Raw escape hatch: create a question from a full Qualtrics QuestionDef.
+  server.registerTool(
+    "create_question_raw",
+    {
+      description: "Create a question from a raw Qualtrics QuestionDef JSON object (full control: per-choice DisplayLogic, ExclusiveAnswer, RecodeValues, Labels, any QuestionType/Selector). Use when the typed helpers cannot express the payload. The object must include QuestionText, QuestionType, Selector, and DataExportTag; it is passed to the survey-definitions API verbatim.",
+      annotations: { destructiveHint: false },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        blockId: z.string().min(1).describe("The block ID to add the question to"),
+        questionDef: z.record(z.any()).describe("Full QuestionDef JSON passed to the API verbatim"),
+      },
+    },
+    withErrorHandling("create_question_raw", async (args) => {
+      const qdef = args.questionDef as Record<string, any>;
+      for (const key of ["QuestionText", "QuestionType", "Selector"]) {
+        if (!qdef[key]) return toolError(`questionDef.${key} is required`);
+      }
+      if (!qdef.DataExportTag) qdef.DataExportTag = nextExportTag();
+      const result = await surveyApi.createQuestion(args.surveyId, args.blockId, qdef);
+      const response: Record<string, any> = {
+        success: true,
+        surveyId: args.surveyId,
+        blockId: args.blockId,
+        questionId: result.result.QuestionID,
+        message: "Question created successfully (raw)",
+      };
+      if (typeof qdef.QuestionJS === "string") {
+        const warning = checkQuestionJSWarning(qdef.QuestionJS);
+        if (warning) response.warning = warning;
+      }
+      return toolSuccess(response);
+    })
+  );
+
+  // Raw escape hatch: replace a question definition wholesale.
+  server.registerTool(
+    "update_question_raw",
+    {
+      description: "Update a question by PUTting a raw Qualtrics QuestionDef JSON object verbatim (full control counterpart to update_question). Fetch the current definition with get_question first, modify it, and pass the result. Strip server-generated keys (QuestionText_Unsafe, GradingData, DefaultChoices, NextChoiceId, NextAnswerId, DataVisibility) — the API rejects unknown/read-only fields.",
+      annotations: { destructiveHint: false, idempotentHint: true },
+      inputSchema: {
+        surveyId: z.string().min(1).describe("The Qualtrics survey ID"),
+        questionId: z.string().min(1).describe("The question ID to update (e.g., QID1)"),
+        questionDef: z.record(z.any()).describe("Full QuestionDef JSON passed to the API verbatim"),
+      },
+    },
+    withErrorHandling("update_question_raw", async (args) => {
+      const result = await surveyApi.updateQuestion(args.surveyId, args.questionId, args.questionDef as Record<string, any>);
+      const response: Record<string, any> = {
+        success: true,
+        surveyId: args.surveyId,
+        questionId: args.questionId,
+        message: "Question updated successfully (raw)",
+        details: result.result,
+      };
+      const js = (args.questionDef as Record<string, any>).QuestionJS;
+      if (typeof js === "string") {
+        const warning = checkQuestionJSWarning(js);
+        if (warning) response.warning = warning;
+      }
+      return toolSuccess(response);
+    })
+  );
 }
